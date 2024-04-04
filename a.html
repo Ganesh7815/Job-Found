@@ -1,0 +1,807 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Nova+Square&display=swap");
+
+      *,
+      *::after,
+      *::before {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Nova Square", sans-serif;
+        position: relative;
+        width: auto;
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding-top: 20px;
+      }
+
+      .scores {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: center;
+        width: 100%;
+      }
+
+      h2 {
+        font-size: 16px;
+        color: #b3744d;
+      }
+
+      h2 span {
+        text-decoration: underline;
+        color: #4e3629;
+      }
+
+      #startBtn {
+        font-family: inherit;
+        position: absolute;
+        transform: translate(-50%, -50%);
+        top: 50%;
+        left: 50%;
+        padding: 5px 10px;
+        background-color: #b3744d;
+        color: #f3eddf;
+        border-radius: 5px;
+        border: 2px solid #4e3629;
+        font-size: 16px;
+      }
+
+      canvas {
+        width: 320px;
+        height: 512px;
+        border-radius: 5px;
+        margin-top: 10px;
+      }
+
+      .instructions {
+        margin-top: 15px;
+        font-size: 14px;
+      }
+
+      .hide, img {
+        display: none !important;
+      }
+</style>    
+<title>Nanugathi</title>
+  </head>
+  <body>
+<script>
+onload = () => {
+  const canvas = document.querySelector("canvas");
+  const startBtn = document.querySelector("#startBtn");
+  const ctx = canvas.getContext("2d");
+  canvas._startBtn = startBtn;
+  canvas._scoreEl = document.querySelector("#score");
+
+  canvas._score = 0;
+
+  canvas._gameScale = 32;
+  canvas.width = 320 * 2;
+  canvas.height = 512 * 2;
+
+  const frameRate = 160;
+  let timeForNextFrame = 0;
+  let gameStarted = false;
+
+  const spriteImg = document.querySelector("#sprite32")
+  const bgImg = document.querySelector("#bg32")
+
+  canvas._spriteImg = spriteImg;
+  canvas._bgImage = bgImg;
+
+  let prevTime = 0;
+
+  let lastTouchPos = { x: 0, y: 0 };
+
+  const nanugathi = new Nanugathi(canvas);
+  const kaanaa = [];
+
+  for (let i = 0; i < 2; i++) {
+    kaanaa.push(new Kaanaa(canvas));
+  }
+
+  (function animate(timeStamp) {
+    let dt = timeStamp - prevTime;
+    prevTime = timeStamp;
+
+    if (timeForNextFrame >= frameRate) {
+      ctx.reset();
+      drawBg(ctx, canvas);
+      if (gameStarted) {
+        nanugathi.update();
+        kaanaa.forEach((kaanaa) => {
+          kaanaa.draw(ctx);
+          nanugathi.eatKaanaa(kaanaa);
+        });
+        nanugathi.draw(ctx);
+      }
+      timeForNextFrame = 0;
+    } else {
+      timeForNextFrame += dt;
+    }
+
+    requestAnimationFrame(animate);
+  })(0);
+
+  function startGame(e) {
+    if (!gameStarted) {
+      gameStarted = true;
+      e.target.classList.add("hide");
+    } else if (nanugathi.collidedHashi) {
+      nanugathi.reset(kaanaa);
+      e.target.classList.add("hide");
+    }
+  }
+
+  startBtn.addEventListener("click", (e) => {
+    startGame(e);
+  });
+
+  startBtn.addEventListener("touchstart", (e) => {
+    startGame(e);
+  });
+
+  addEventListener("keydown", (e) => {
+    if (!nanugathi.collidedHashi) {
+      nanugathi.changeMovement(e.key);
+    }
+  });
+
+  addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+
+      lastTouchPos.x = e.changedTouches[0].screenX;
+      lastTouchPos.y = e.changedTouches[0].screenY;
+    },
+    { passive: false }
+  );
+
+  addEventListener(
+    "touchend",
+    (e) => {
+      e.preventDefault();
+
+      let angle = Math.atan2(
+        e.changedTouches[0].screenY - lastTouchPos.y,
+        e.changedTouches[0].screenX - lastTouchPos.x
+      );
+
+      const cosValue = Math.floor(Math.cos(angle));
+      const sinValue = Math.floor(Math.sin(angle));
+
+      if (!nanugathi.collidedHashi) {
+        if (
+          (nanugathi.bo.direction === "ArrowLeft" ||
+            nanugathi.bo.direction === "ArrowRight") &&
+          sinValue === -1 &&
+          cosValue <= 0 &&
+          cosValue >= -1
+        ) {
+          nanugathi.changeMovement("ArrowUp");
+        } else if (
+          (nanugathi.bo.direction === "ArrowLeft" ||
+            nanugathi.bo.direction === "ArrowRight") &&
+          cosValue >= -1 &&
+          cosValue <= 0 &&
+          sinValue >= 0 &&
+          sinValue <= 1
+        ) {
+          nanugathi.changeMovement("ArrowDown");
+        } else if (
+          (nanugathi.bo.direction === "ArrowDown" ||
+            nanugathi.bo.direction === "ArrowUp") &&
+          cosValue === -1 &&
+          sinValue >= -1 &&
+          sinValue <= 0
+        ) {
+          nanugathi.changeMovement("ArrowLeft");
+        } else if (
+          (nanugathi.bo.direction === "ArrowDown" ||
+            nanugathi.bo.direction === "ArrowUp") &&
+          cosValue >= 0 &&
+          cosValue <= 1 &&
+          sinValue >= -1 &&
+          sinValue <= 0
+        ) {
+          nanugathi.changeMovement("ArrowRight");
+        }
+      }
+    },
+    { passive: false }
+  );
+
+  function drawBg(ctx, canvas) {
+    for (let i = 0; i < canvas.width; i += canvas._gameScale) {
+      for (let j = 0; j < canvas.height; j += canvas._gameScale) {
+        ctx.drawImage(
+          canvas._bgImage,
+          i,
+          j,
+          canvas._gameScale,
+          canvas._gameScale
+        );
+      }
+    }
+  }
+};
+</script>
+    <div class="scores">
+      <h2>Score: <span id="score">0</span></h2>
+    </div>
+    <button id="startBtn" class="">Touch to Start</button>
+    <canvas></canvas>
+    <div class="instructions">
+      <p>Swipe on the screen to move</p>
+    </div>
+    <img src="https://i.ibb.co/y4HmSgs/Sprite32.png" id="sprite32"/>
+     <img src="https://i.ibb.co/Qmm5kTc/bg32.png" id="bg32"/>
+    <script>
+        class Nanugathi {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.hashigandu = [];
+
+    this.bo;
+    this.collidedHashi = false;
+    this.spritePoses = {
+      bo: {
+        ArrowUp: {
+          x: 0,
+          y: 0,
+        },
+        ArrowDown: {
+          x: 0,
+          y: canvas._gameScale,
+        },
+        ArrowLeft: {
+          x: canvas._gameScale,
+          y: 0,
+        },
+        ArrowRight: {
+          x: canvas._gameScale,
+          y: canvas._gameScale,
+        },
+      },
+      hashi: {
+        ArrowUp: {
+          ArrowUp: {
+            x: 0,
+            y: canvas._gameScale * 2,
+          },
+          ArrowRight: {
+            x: canvas._gameScale * 6,
+            y: 0,
+          },
+          ArrowLeft: {
+            x: canvas._gameScale * 7,
+            y: 0,
+          },
+        },
+        ArrowDown: {
+          ArrowDown: {
+            x: 0,
+            y: canvas._gameScale * 3,
+          },
+          ArrowRight: {
+            x: canvas._gameScale * 6,
+            y: canvas._gameScale,
+          },
+          ArrowLeft: {
+            x: canvas._gameScale * 7,
+            y: canvas._gameScale,
+          },
+        },
+        ArrowLeft: {
+          ArrowLeft: {
+            x: canvas._gameScale,
+            y: canvas._gameScale * 3,
+          },
+          ArrowUp: {
+            x: canvas._gameScale * 4,
+            y: canvas._gameScale,
+          },
+          ArrowDown: {
+            x: canvas._gameScale * 4,
+            y: 0,
+          },
+        },
+        ArrowRight: {
+          ArrowRight: {
+            x: canvas._gameScale,
+            y: canvas._gameScale * 2,
+          },
+          ArrowUp: {
+            x: canvas._gameScale * 5,
+            y: canvas._gameScale,
+          },
+          ArrowDown: {
+            x: canvas._gameScale * 5,
+            y: 0,
+          },
+        },
+      },
+      nigoo: {
+        ArrowUp: {
+          ArrowUp: {
+            x: canvas._gameScale * 2,
+            y: 0,
+          },
+          ArrowRight: {
+            x: canvas._gameScale * 4,
+            y: canvas._gameScale * 3,
+          },
+          ArrowLeft: {
+            x: canvas._gameScale * 5,
+            y: canvas._gameScale * 3,
+          },
+        },
+        ArrowDown: {
+          ArrowDown: {
+            x: canvas._gameScale * 2,
+            y: canvas._gameScale,
+          },
+          ArrowRight: {
+            x: canvas._gameScale * 4,
+            y: canvas._gameScale * 2,
+          },
+          ArrowLeft: {
+            x: canvas._gameScale * 5,
+            y: canvas._gameScale * 2,
+          },
+        },
+        ArrowLeft: {
+          ArrowLeft: {
+            x: canvas._gameScale * 3,
+            y: canvas._gameScale,
+          },
+          ArrowUp: {
+            x: canvas._gameScale * 2,
+            y: canvas._gameScale * 3,
+          },
+          ArrowDown: {
+            x: canvas._gameScale * 2,
+            y: canvas._gameScale * 2,
+          },
+        },
+        ArrowRight: {
+          ArrowRight: {
+            x: canvas._gameScale * 3,
+            y: 0,
+          },
+          ArrowUp: {
+            x: canvas._gameScale * 3,
+            y: canvas._gameScale * 3,
+          },
+          ArrowDown: {
+            x: canvas._gameScale * 3,
+            y: canvas._gameScale * 2,
+          },
+        },
+      },
+    };
+    this.init();
+  }
+
+  init() {
+    this.bo = new Bo({
+      pos: { x: this.canvas.width / 2, y: this.canvas.height / 2 },
+      type: "bo",
+      direction: "ArrowUp",
+      lastHashi: null,
+      nanugathi: this,
+      canvas: this.canvas,
+    });
+
+    let hashi = new Hashi({
+      pos: { x: this.bo.pos.x, y: this.bo.pos.y + this.bo.size.h },
+      type: "hashi",
+      direction: this.bo.direction,
+      lastHashi: this.bo,
+      nanugathi: this,
+      canvas: this.canvas,
+    });
+
+    let nigoo = new Hashi({
+      pos: { x: hashi.pos.x, y: hashi.pos.y + hashi.size.h },
+      type: "nigoo",
+      direction: hashi.direction,
+      lastHashi: hashi,
+      nanugathi: this,
+      canvas: this.canvas,
+    });
+
+    this.hashigandu.push(this.bo);
+    this.hashigandu.push(hashi);
+    this.hashigandu.push(nigoo);
+  }
+
+  draw(ctx) {
+    for (let i = this.hashigandu.length - 1; i >= 0; i--) {
+      this.hashigandu[i].draw(ctx);
+    }
+  }
+
+  update() {
+    this.checkHashi();
+    if (!this.collidedHashi) {
+      this.hashigandu.forEach((hashi) => {
+        hashi.update();
+      });
+    }
+  }
+
+  changeMovement(direction) {
+    this.bo.move(direction);
+  }
+
+  addHashi() {
+    let nigoo = this.hashigandu[this.hashigandu.length - 1];
+    let newHashi = new Hashi({
+      pos: {
+        x: nigoo.pos.x,
+        y: nigoo.pos.y,
+      },
+      type: "hashi",
+      direction: nigoo.direction,
+      lastHashi: nigoo.lastHashi,
+      nanugathi: this,
+      canvas: this.canvas,
+    });
+
+    nigoo.lastHashi = newHashi;
+
+    this.hashigandu[this.hashigandu.length - 1] = newHashi;
+    this.hashigandu.push(nigoo);
+    // console.log(this.hashigandu);
+  }
+
+  eatKaanaa(kaanaa) {
+    if (
+      kaanaa.pos.x < this.bo.pos.x + this.bo.size.w &&
+      kaanaa.pos.x + kaanaa.size.w > this.bo.pos.x &&
+      kaanaa.pos.y < this.bo.pos.y + this.bo.size.h &&
+      kaanaa.pos.y + kaanaa.size.h > this.bo.pos.y
+    ) {
+      this.setScore(kaanaa);
+      kaanaa.checkHashi(this);
+      this.addHashi();
+    }
+  }
+
+  checkHashi() {
+    if (!this.collidedHashi) {
+      for (let i = 1; i < this.hashigandu.length; i++) {
+        if (
+          this.bo.pos.x === this.hashigandu[i].pos.x &&
+          this.bo.pos.y === this.hashigandu[i].pos.y
+        ) {
+          this.collidedHashi = true;
+          this.canvas._startBtn.innerText = "Retry";
+          this.canvas._startBtn.classList.remove("hide");
+          break;
+        }
+      }
+    }
+  }
+
+  setScore(kaanaa) {
+    this.canvas._score += kaanaa.currentSpritePos.point;
+
+    this.canvas._scoreEl.innerText = this.canvas._score;
+  }
+
+  reset(kaanaa) {
+    this.hashigandu = [];
+    this.init();
+    this.canvas._score = 0;
+    this.canvas._scoreEl.innerText = 0;
+    kaanaa.forEach((kaanaa) => {
+      kaanaa.checkHashi(this);
+    });
+    this.collidedHashi = false;
+  }
+}
+
+class Hashigandu {
+  constructor({ pos, type, lastHashi, direction, nanugathi, canvas }) {
+    this.nanugathi = nanugathi;
+    this.pos = pos;
+    this.lastPos = pos;
+    this.canvas = canvas;
+    this.speed = this.canvas._gameScale;
+    this.size = {
+      w: this.canvas._gameScale,
+      h: this.canvas._gameScale,
+    };
+    this.direction = direction;
+    this.lastHashi = lastHashi;
+    this.type = type;
+    this.currentSpritePos =
+      this.nanugathi.spritePoses[this.type][this.direction];
+  }
+
+  update() {
+    this.lastPos = { ...this.pos };
+  }
+
+  draw(ctx) {
+    // ctx.fillStyle = this.fillStyle;
+    // ctx.fillRect(this.pos.x, this.pos.y, this.size.w, this.size.h);
+    // ctx.fill();
+    ctx.drawImage(
+      this.canvas._spriteImg,
+      this.currentSpritePos.x,
+      this.currentSpritePos.y,
+      this.size.w,
+      this.size.h,
+      this.pos.x,
+      this.pos.y,
+      this.size.w,
+      this.size.h
+    );
+  }
+}
+
+class Bo extends Hashigandu {
+  constructor({ pos, type, lastHashi, direction, nanugathi, canvas }) {
+    super({ pos, type, lastHashi, direction, nanugathi, canvas });
+    this.movements = new MovementController();
+    this.antiDirections = {
+      ArrowDown: "ArrowUp",
+      ArrowUp: "ArrowDown",
+      ArrowRight: "ArrowLeft",
+      ArrowLeft: "ArrowRight",
+    };
+    this.possibleDirections = {
+      ArrowDown: this.movements.ArrowDown,
+      ArrowUp: this.movements.ArrowUp,
+      ArrowRight: this.movements.ArrowRight,
+      ArrowLeft: this.movements.ArrowLeft,
+    };
+    this.fillStyle = "#F58A07";
+    this.lastDirection = direction;
+  }
+
+  move(direction) {
+    if (
+      this.direction !== this.antiDirections[direction] &&
+      Object.keys(this.possibleDirections).includes(direction)
+    ) {
+      this.lastDirection = direction;
+      this.direction = direction;
+      this.currentSpritePos =
+        this.nanugathi.spritePoses[this.type][this.direction];
+    }
+  }
+
+  update() {
+    super.update();
+    this.possibleDirections[this.direction](this);
+  }
+}
+
+class Hashi extends Hashigandu {
+  constructor({ pos, type, lastHashi, direction, nanugathi, canvas }) {
+    super({ pos, type, lastHashi, direction, nanugathi, canvas });
+    this.fillStyle = "#F9AB55";
+    this.lastDirection = direction;
+  }
+  move() {
+    // this.direction = this.lastHashi.direction;
+  }
+
+  update() {
+    super.update();
+
+    this.lastDirection = this.direction;
+    this.direction = this.lastHashi.lastDirection;
+
+    this.currentSpritePos =
+      this.nanugathi.spritePoses[this.type][this.lastDirection][this.direction];
+
+    let nextPos = { ...this.lastHashi.lastPos };
+    this.pos = nextPos;
+  }
+}
+
+class MovementController {
+  ArrowDown(bo) {
+    if (bo.pos.y + bo.size.h >= bo.canvas.height) {
+      bo.pos.y = 0;
+    } else {
+      bo.pos.y += bo.speed;
+    }
+  }
+
+  ArrowUp(bo) {
+    if (bo.pos.y < bo.size.h) {
+      bo.pos.y = bo.canvas.height - bo.size.h;
+    } else {
+      bo.pos.y -= bo.speed;
+    }
+  }
+
+  ArrowRight(bo) {
+    if (bo.pos.x + bo.size.w >= bo.canvas.width) {
+      bo.pos.x = 0;
+    } else {
+      bo.pos.x += bo.speed;
+    }
+  }
+
+  ArrowLeft(bo) {
+    if (bo.pos.x < bo.size.w) {
+      bo.pos.x = bo.canvas.width - bo.size.w;
+    } else {
+      bo.pos.x -= bo.speed;
+    }
+  }
+}
+
+class Kaanaa {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.pos = {
+      x:
+        Math.floor(
+          (Math.random() * this.canvas.width) / this.canvas._gameScale
+        ) * this.canvas._gameScale,
+      y:
+        Math.floor(
+          (Math.random() * this.canvas.height) / this.canvas._gameScale
+        ) * this.canvas._gameScale,
+    };
+    this.size = {
+      w: this.canvas._gameScale,
+      h: this.canvas._gameScale,
+    };
+    this.spritePos = {
+      0: {
+        0: {
+          x: canvas._gameScale * 6,
+          y: canvas._gameScale * 3,
+          point: 5,
+        },
+        1: {
+          x: canvas._gameScale * 6,
+          y: canvas._gameScale * 3,
+          point: 5,
+        },
+        2: {
+          x: canvas._gameScale * 7,
+          y: canvas._gameScale * 3,
+          point: 5,
+        },
+        3: {
+          x: canvas._gameScale * 7,
+          y: canvas._gameScale * 3,
+          point: 5,
+        },
+      },
+      1: {
+        0: {
+          x: canvas._gameScale * 8,
+          y: 0,
+          point: 7,
+        },
+        1: {
+          x: canvas._gameScale * 9,
+          y: 0,
+          point: 7,
+        },
+        2: {
+          x: canvas._gameScale * 8,
+          y: canvas._gameScale,
+          point: 7,
+        },
+        3: {
+          x: canvas._gameScale * 9,
+          y: canvas._gameScale,
+          point: 7,
+        },
+      },
+      2: {
+        0: {
+          x: canvas._gameScale * 8,
+          y: canvas._gameScale * 2,
+          point: 10,
+        },
+        1: {
+          x: canvas._gameScale * 8,
+          y: canvas._gameScale * 3,
+          point: 10,
+        },
+        2: {
+          x: canvas._gameScale * 9,
+          y: canvas._gameScale * 2,
+          point: 10,
+        },
+        3: {
+          x: canvas._gameScale * 9,
+          y: canvas._gameScale * 3,
+          point: 10,
+        },
+      },
+    };
+    this.currentSpritePos =
+      this.spritePos[Math.floor(Math.random() * 3)][
+        Math.floor(Math.random() * 4)
+      ];
+  }
+
+  draw(ctx) {
+    // ctx.fillStyle = "#084887";
+    // ctx.fillRect(this.pos.x, this.pos.y, this.size.w, this.size.h);
+    // ctx.fill();
+    ctx.drawImage(
+      this.canvas._spriteImg,
+      this.currentSpritePos.x,
+      this.currentSpritePos.y,
+      this.size.w,
+      this.size.h,
+      this.pos.x,
+      this.pos.y,
+      this.size.w,
+      this.size.h
+    );
+  }
+
+  changePos() {
+    return {
+      x:
+        Math.floor(
+          (Math.random() * this.canvas.width) / this.canvas._gameScale
+        ) * this.canvas._gameScale,
+      y:
+        Math.floor(
+          (Math.random() * this.canvas.height) / this.canvas._gameScale
+        ) * this.canvas._gameScale,
+    };
+  }
+
+  checkHashi(nanugathi) {
+    let newPos = this.changePos();
+    let onHashi = false;
+    for (let i = 0; i < nanugathi.hashigandu.length; i++) {
+      if (
+        newPos.x === nanugathi.hashigandu[i].pos.x &&
+        newPos.y === nanugathi.hashigandu[i].pos.y
+      ) {
+        onHashi = true;
+        break;
+      } else {
+        continue;
+      }
+    }
+
+    if (onHashi) {
+      this.checkHashi(nanugathi);
+    } else {
+      this.pos = newPos;
+      this.currentSpritePos =
+        this.spritePos[Math.floor(Math.random() * 3)][
+          Math.floor(Math.random() * 4)
+        ];
+      return;
+    }
+  }
+}
+
+
+    </script>
+    
+  </body>
+</html>
